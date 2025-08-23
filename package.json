@@ -2,6 +2,7 @@
   "name": "fact-check-bot",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -11,7 +12,9 @@
   "description": "",
   "dependencies": {
     "body-parser": "^2.2.0",
+    "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "openai": "^5.15.0",
     "twilio": "^5.8.0"
   }
 }
