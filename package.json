@@ -12,13 +12,19 @@
   "description": "",
   "dependencies": {
     "@deepgram/sdk": "^4.11.2",
+    "@google-cloud/vision": "^5.3.3",
     "axios": "^1.11.0",
     "body-parser": "^2.2.0",
     "deepgram": "^1.0.3",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "fs": "^0.0.1-security",
+    "markdown-it": "^14.1.0",
     "openai": "^5.15.0",
+    "react-markdown": "^10.1.0",
+    "remark": "^15.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-stringify": "^11.0.0",
     "twilio": "^5.8.0"
   }
 }
