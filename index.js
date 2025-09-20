@@ -317,11 +317,10 @@ app.post("/whatsapp", async (req, res) => {
 
       // Step 4: Create short audio summary (first 2 sentences)
       const shortSummary = reply.split(". ").slice(0, 2).join(". ");
-      console.log("Short summary for TTS:", shortSummary);
+      console.log("Generating TTS for:", shortSummary);
       
-      // Temporarily disable TTS due to ElevenLabs free tier restrictions
-      console.log("TTS temporarily disabled due to ElevenLabs API restrictions");
-      const audioFile = null; // await generateTTS(shortSummary);
+      // Generate TTS with ElevenLabs (re-enabled for Render deployment)
+      const audioFile = await generateTTS(shortSummary);
 
       // Step 5: Send text response with audio if available
       if (audioFile) {
@@ -331,7 +330,7 @@ app.post("/whatsapp", async (req, res) => {
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Create a public URL for the audio file
-        const audioUrl = `https://74668bfcabe0.ngrok-free.app/audio/${audioFile}`;
+        const audioUrl = `https://fact-check-bot-08uv.onrender.com/audio/${audioFile}`;
         
         // Verify file exists before sending
         if (fs.existsSync(audioFile)) {
