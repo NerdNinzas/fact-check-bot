@@ -131,6 +131,21 @@ async function transcribeAudio(buffer, contentType = "audio/ogg") {
   }
 }
 
+// Clean text for TTS by removing markdown and references
+function cleanTextForTTS(text) {
+  return text
+    // Remove markdown bold/italic formatting
+    .replace(/\*\*(.*?)\*\*/g, '$1')  // Remove **bold**
+    .replace(/\*(.*?)\*/g, '$1')      // Remove *italic*
+    .replace(/__(.*?)__/g, '$1')      // Remove __bold__
+    .replace(/_(.*?)_/g, '$1')        // Remove _italic_
+    // Remove reference brackets like [1], [2], [1][3], etc.
+    .replace(/\[\d+\](\[\d+\])*/g, '')
+    // Remove extra whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Generate TTS from summary
 async function generateTTS(text) {
   if (!deepgram) {
@@ -254,22 +269,37 @@ app.post("/whatsapp", async (req, res) => {
       const sonarResponse = await openai.chat.completions.create({
         model: "sonar-pro",
         messages: [
-          { role: "system", content: "You are an assistant detecting misinformation and scams. Provide both a short summary and detailed reasoning." },
+          { role: "system", content: "You are an assistant detecting misinformation and scams. Provide a short answere of 3 or 4 lines and at last give that its verified or unverified" },
           { role: "user", content: `User Query: ${userMessage}\n\nExternal Scam Data: ${toolData || "No additional data"}` }
         ]
       });
 
       const reply = sonarResponse.choices?.[0]?.message?.content || "I couldn't find an answer.";
 
-      // Step 4: Create short audio summary (first 2 sentences)
-      const shortSummary = reply.split(". ").slice(0, 2).join(". ");
-      console.log("Generating TTS for:", shortSummary);
+      // Step 4: Determine if this was audio input to format response accordingly
+      const isAudioInput = mediaType && mediaType.startsWith("audio");
+      let finalResponse;
       
-      // Temporarily disable TTS due to ngrok free limitations
-      console.log("⚠️ TTS disabled due to ngrok free account limitations");
-      const audioFile = null; // await generateTTS(shortSummary);
+      if (isAudioInput) {
+        // For audio input, include both transcribed text and AI response
+        finalResponse = `📝 *Your message:* "${userMessage}"\n\n🤖 *Fact-check result:*\n${reply}`;
+      } else {
+        // For text input, just send the AI response
+        finalResponse = reply;
+      }
 
-      // Step 5: Send text response with audio if available
+      // Step 5: Create short audio summary (first 2 sentences of AI response)
+      const shortSummary = reply.split(". ").slice(0, 2).join(". ") + (reply.split(". ").length > 2 ? "." : "");
+      // Clean the text for TTS (remove markdown and references)
+      const cleanSummary = cleanTextForTTS(shortSummary);
+      console.log("Original text:", shortSummary);
+      console.log("Cleaned for TTS:", cleanSummary);
+      
+      // Generate TTS audio
+      console.log("🔊 Generating TTS audio...");
+      const audioFile = await generateTTS(cleanSummary);
+
+      // Step 6: Send text response with audio if available
       if (audioFile) {
         console.log(`Audio file generated: ${audioFile}`);
         
@@ -277,21 +307,24 @@ app.post("/whatsapp", async (req, res) => {
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Create a public URL for the audio file
-        const audioUrl = `https://74668bfcabe0.ngrok-free.app/audio/${audioFile}`;
+        const baseUrl = process.env.PUBLIC_URL || 'https://1d07889b18ed.ngrok-free.app';
+        const audioUrl = `${baseUrl}/audio/${audioFile}`;
         
         // Verify file exists before sending
         if (fs.existsSync(audioFile)) {
           // Send text message with audio attachment
-          const textMsg = twiml.message(reply);
+          const textMsg = twiml.message(finalResponse);
           textMsg.media(audioUrl); // Attach audio to the text message
           console.log(`✅ Audio sent to WhatsApp: ${audioUrl}`);
+          console.log(`📝 Text sent: ${isAudioInput ? 'Transcribed text + AI response' : 'AI response only'}`);
         } else {
           console.log(`❌ Audio file not found: ${audioFile}`);
-          twiml.message(reply);
+          twiml.message(finalResponse);
         }
       } else {
+        console.log("🔇 No audio generated, sending text only");
         // Send text only if no audio
-        twiml.message(reply);
+        twiml.message(finalResponse);
       }
     }
   } catch (err) {
