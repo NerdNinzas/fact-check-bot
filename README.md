@@ -12,6 +12,21 @@ An intelligent WhatsApp bot that fact-checks messages, URLs, images, and audio u
 - **URL Analysis**: Extracts and analyzes content from Instagram, YouTube, and web URLs
 - **Real-time WhatsApp Integration**: Instant responses via Twilio
 
+- ## 🖼️ Usage Examples
+
+### Instagram Post Analysis
+![Instagram Analysis](./public/instagram.png)
+*Send an Instagram URL to get fact-checked content analysis*
+
+### Suspicious Link Verification
+![Lottery Scam](./public/lottery.png) 
+*Verify suspicious lottery or scam links for authenticity*
+
+### Image Text Analysis
+![OCR Analysis](./public/ocr.png)
+*Upload images with text for fake news detection*
+
+
 ## 🏗️ Tech Stack
 
 ### Core Technologies
@@ -43,19 +58,6 @@ Once connected, you can send:
 - 📷 Images with text for OCR analysis
 - 🔗 URLs from Instagram, YouTube, or websites
 
-## 🖼️ Usage Examples
-
-### Instagram Post Analysis
-![Instagram Analysis](./public/instagram.png)
-*Send an Instagram URL to get fact-checked content analysis*
-
-### Suspicious Link Verification
-![Lottery Scam](./public/lottery.png) 
-*Verify suspicious lottery or scam links for authenticity*
-
-### Image Text Analysis
-![OCR Analysis](./public/ocr.png)
-*Upload images with text for fake news detection*
 
 ## 🛠️ Setup & Installation
 
