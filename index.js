@@ -5,8 +5,8 @@ import { OpenAI } from "openai";
 import { config as configDotenv } from "dotenv";
 import axios from "axios";
 import fs from "fs";
-import { createClient } from "@deepgram/sdk";
-import { createWorker } from "tesseract.js";
+import speech from "@google-cloud/speech";
+import vision from "@google-cloud/vision";
 import { scamMinderTool } from "./scamMinderTool.js";
 
 const { MessagingResponse } = twilio.twiml;
@@ -17,17 +17,7 @@ console.log("Starting fact-check bot...");
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 
-// Serve static files for audio responses
-app.use('/audio', express.static('./', {
-  setHeaders: (res, path) => {
-    console.log(`📁 Serving audio file: ${path}`);
-    console.log(`📁 File exists: ${fs.existsSync(path)}`);
-    if (path.endsWith('.mp3')) {
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.setHeader('Cache-Control', 'no-cache');
-    }
-  }
-}));
+
 
 // Add middleware to log all requests
 app.use((req, res, next) => {
@@ -40,15 +30,7 @@ app.get("/test", (req, res) => {
   res.json({ status: "Server is working!", timestamp: new Date().toISOString() });
 });
 
-// Test audio files endpoint
-app.get("/test-audio", (req, res) => {
-  const files = fs.readdirSync('.').filter(file => file.startsWith('output_') && file.endsWith('.mp3'));
-  res.json({ 
-    status: "Audio files available", 
-    count: files.length,
-    files: files.slice(-5) // Show last 5 files
-  });
-});
+
 
 app.post("/test-webhook", async (req, res) => {
   console.log("Test webhook called with body:", req.body);
@@ -82,13 +64,16 @@ const openai = new OpenAI({
 
 console.log("OpenAI client initialized");
 
-// Deepgram client
-let deepgram;
+// Google Cloud clients
+let speechClient;
+let visionClient;
 try {
-  deepgram = createClient(process.env.DEEPGRAM_API_KEY);
-  console.log("Deepgram client initialized");
+  speechClient = new speech.SpeechClient();
+  visionClient = new vision.ImageAnnotatorClient();
+  console.log("Google Cloud Speech and Vision clients initialized");
 } catch (error) {
-  console.error("Failed to initialize Deepgram:", error);
+  console.error("Failed to initialize Google Cloud clients:", error);
+  console.log("Make sure GOOGLE_APPLICATION_CREDENTIALS is set or service account key is configured");
 }
 
 // Extract URLs from text
@@ -153,55 +138,76 @@ async function downloadMedia(mediaUrl) {
   }
 }
 
-// Transcribe audio with Deepgram
+// Transcribe audio with Google Cloud Speech-to-Text
 async function transcribeAudio(buffer, contentType = "audio/ogg") {
-  if (!deepgram) {
-    console.error("Deepgram client not initialized");
+  if (!speechClient) {
+    console.error("Google Cloud Speech client not initialized");
     return "";
   }
   
   try {
-    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
-      buffer,
-      {
-        model: "nova-2",
-        language: "en",
-        smart_format: true,
-      }
-    );
+    // Convert audio format if needed
+    let audioConfig = {
+      encoding: 'OGG_OPUS',
+      sampleRateHertz: 16000,
+      languageCode: 'en-US',
+      alternativeLanguageCodes: ['hi-IN', 'es-ES', 'fr-FR'], // Support multiple languages
+      enableAutomaticPunctuation: true,
+    };
 
-    if (error) {
-      console.error("Deepgram transcription error:", error);
-      return "";
+    // Adjust encoding based on content type
+    if (contentType.includes('mp3')) {
+      audioConfig.encoding = 'MP3';
+    } else if (contentType.includes('wav')) {
+      audioConfig.encoding = 'LINEAR16';
     }
 
-    return result.results.channels[0].alternatives[0].transcript || "";
+    const audio = {
+      content: buffer.toString('base64'),
+    };
+
+    const request = {
+      audio: audio,
+      config: audioConfig,
+    };
+
+    const [response] = await speechClient.recognize(request);
+    const transcription = response.results
+      .map(result => result.alternatives[0].transcript)
+      .join('\n');
+
+    console.log('Google Speech transcription:', transcription);
+    return transcription || "";
   } catch (err) {
-    console.error("Transcription error:", err);
+    console.error("Google Cloud Speech transcription error:", err);
     return "";
   }
 }
 
-// Extract text from image using Tesseract OCR
+// Extract text from image using Google Cloud Vision API
 async function extractTextFromImage(buffer, contentType = "image/jpeg") {
-  console.log("Starting OCR text extraction...");
+  if (!visionClient) {
+    console.error("Google Cloud Vision client not initialized");
+    return "";
+  }
+
+  console.log("Starting Google Vision OCR text extraction...");
   
-  let worker;
   try {
-    worker = await createWorker("eng");
+    const [result] = await visionClient.textDetection({
+      image: {
+        content: buffer.toString('base64'),
+      },
+    });
+
+    const detections = result.textAnnotations;
+    const extractedText = detections && detections.length > 0 ? detections[0].description : '';
     
-    const { data: { text } } = await worker.recognize(buffer);
+    console.log("Google Vision OCR extracted text:", extractedText);
     
-    console.log("OCR extracted text:", text);
-    
-    await worker.terminate();
-    
-    return text.trim();
+    return extractedText.trim();
   } catch (err) {
-    console.error("OCR extraction error:", err);
-    if (worker) {
-      await worker.terminate();
-    }
+    console.error("Google Cloud Vision OCR extraction error:", err);
     return "";
   }
 }
@@ -268,69 +274,7 @@ function getVerificationStatus(aiResponse) {
   return '⚠️ VERIFICATION UNCLEAR';
 }
 
-// Generate TTS from summary
-async function generateTTS(text) {
-  if (!deepgram) {
-    console.error("Deepgram client not initialized");
-    return null;
-  }
-  
-  try {
-    const { result, error } = await deepgram.speak.request(
-      { text },
-      {
-        model: "aura-asteria-en",
-        encoding: "mp3",
-      }
-    );
 
-    if (error) {
-      console.error("Deepgram TTS error:", error);
-      return null;
-    }
-
-    console.log("TTS result type:", typeof result);
-    console.log("TTS result constructor:", result?.constructor?.name);
-    console.log("TTS result keys:", Object.keys(result || {}));
-
-    // Save audio to temp file
-    const filename = `output_${Date.now()}.mp3`;
-    
-    try {
-      // Handle different response types from Deepgram SDK
-      let buffer;
-      
-      if (result && result.arrayBuffer) {
-        // If result has arrayBuffer method (Response object)
-        const arrayBuffer = await result.arrayBuffer();
-        buffer = Buffer.from(arrayBuffer);
-      } else if (result && result.stream) {
-        // If result has a stream
-        const chunks = [];
-        for await (const chunk of result.stream) {
-          chunks.push(chunk);
-        }
-        buffer = Buffer.concat(chunks);
-      } else if (Buffer.isBuffer(result)) {
-        // If result is already a buffer
-        buffer = result;
-      } else {
-        console.log("Unknown TTS response format:", typeof result);
-        return null;
-      }
-      
-      fs.writeFileSync(filename, buffer);
-      console.log(`TTS audio saved as: ${filename}`);
-      return filename;
-    } catch (saveError) {
-      console.error("Error saving TTS file:", saveError);
-      return null;
-    }
-  } catch (err) {
-    console.error("TTS generation error:", err);
-    return null;
-  }
-}
 
 app.post("/whatsapp", async (req, res) => {
   const twiml = new MessagingResponse();
@@ -506,47 +450,8 @@ CRITICAL: Always respond in English, provide detailed analysis with evidence, an
         finalResponse = reply;
       }
 
-      // Step 5: Generate TTS audio only for audio inputs
-      if (isAudioInput) {
-        // Create short audio summary (first 2 sentences of AI response)
-        const shortSummary = reply.split(". ").slice(0, 2).join(". ") + (reply.split(". ").length > 2 ? "." : "");
-        // Clean the text for TTS (remove markdown and references)
-        const cleanSummary = cleanTextForTTS(shortSummary);
-        console.log("Original text:", shortSummary);
-        console.log("Cleaned for TTS:", cleanSummary);
-        
-        // Generate TTS audio
-        console.log("🔊 Generating TTS audio for audio input...");
-        const audioFile = await generateTTS(cleanSummary);
-
-        // Step 6: Send audio input response with TTS
-        if (audioFile) {
-          console.log(`Audio file generated: ${audioFile}`);
-          
-          // Add a small delay to ensure file is fully written
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Create a public URL for the audio file
-          const baseUrl = process.env.PUBLIC_URL || 'https://1d07889b18ed.ngrok-free.app';
-          const audioUrl = `${baseUrl}/audio/${audioFile}`;
-          
-          // Verify file exists before sending
-          if (fs.existsSync(audioFile)) {
-            // Send text message with audio attachment (sanitize for XML)
-            const sanitizedResponse = sanitizeForXML(finalResponse);
-            const textMsg = twiml.message(sanitizedResponse);
-            textMsg.media(audioUrl); // Attach audio to the text message
-            console.log(`✅ Audio sent to WhatsApp: ${audioUrl}`);
-            console.log(`📝 Text sent: Transcribed text + AI response with audio`);
-          } else {
-            console.log(`❌ Audio file not found: ${audioFile}`);
-            twiml.message(sanitizeForXML(finalResponse));
-          }
-        } else {
-          console.log("🔇 No audio generated, sending text only");
-          twiml.message(sanitizeForXML(finalResponse));
-        }
-      } else {
+      // Step 5: Send responses (no TTS functionality)
+      {
         // Step 6: For text and image inputs, send only text response
         console.log(`📝 Sending text-only response for ${isImageInput ? 'image' : 'text'} input`);
         console.log("📤 Final response being sent:", finalResponse.substring(0, 200) + "...");

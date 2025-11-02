@@ -1,25 +1,25 @@
 {
   "name": "fact-check-bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["fact-check", "whatsapp", "bot", "ai", "google-cloud"],
+  "author": "NerdNinzas",
   "license": "ISC",
-  "description": "",
+  "description": "AI-powered WhatsApp fact-checking bot using Google Cloud services and Perplexity AI",
   "dependencies": {
-    "@deepgram/sdk": "^4.11.2",
+    "@google-cloud/speech": "^6.7.0",
+    "@google-cloud/vision": "^4.3.2",
     "axios": "^1.11.0",
     "body-parser": "^2.2.0",
-    "deepgram": "^1.0.3",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "fs": "^0.0.1-security",
     "openai": "^5.15.0",
-    "tesseract.js": "^6.0.1",
     "twilio": "^5.8.0"
   }
 }
