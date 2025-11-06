@@ -35,6 +35,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint for Render free tier
+app.get("/health", (req, res) => {
+  res.status(200).json({ 
+    status: "healthy", 
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    memory: process.memoryUsage(),
+    version: "2.0.0"
+  });
+});
+
 // Test endpoint
 app.get("/test", (req, res) => {
   res.json({ status: "Server is working!", timestamp: new Date().toISOString() });
@@ -659,4 +670,27 @@ CRITICAL: Always respond in English, provide detailed analysis with evidence, an
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Keep-alive mechanism for Render free tier
+function keepAlive() {
+  const url = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || `http://localhost:${PORT}`;
+  
+  setInterval(async () => {
+    try {
+      const response = await axios.get(`${url}/health`);
+      console.log(`⚡ Keep-alive ping successful: ${response.status} at ${new Date().toISOString()}`);
+    } catch (error) {
+      console.log(`❌ Keep-alive ping failed: ${error.message}`);
+    }
+  }, 7 * 60 * 1000); // Ping every 7 minutes
+}
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  
+  // Start keep-alive only in production (not localhost)
+  if (process.env.NODE_ENV === 'production' || process.env.RENDER_EXTERNAL_URL) {
+    console.log("🔄 Starting keep-alive mechanism for Render free tier...");
+    setTimeout(keepAlive, 60000); // Start after 1 minute
+  }
+});
