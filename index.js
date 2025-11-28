@@ -538,7 +538,7 @@ CRITICAL: Always respond in English, provide detailed analysis with evidence, an
           await new Promise(resolve => setTimeout(resolve, 500));
           
           // Create a public URL for the audio file
-          const baseUrl = process.env.PUBLIC_URL || 'https://1d07889b18ed.ngrok-free.app';
+          const baseUrl = process.env.PUBLIC_URL || 'https://fact-check-bot-1.onrender.com';
           const audioUrl = `${baseUrl}/audio/${audioFile}`;
           
           // Verify file exists before sending
